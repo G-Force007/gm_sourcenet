@@ -7,7 +7,6 @@ end
 include("netmessages.lua")
 
 -- Initialization
-
 HookNetChannel(
 	-- nochan prevents a net channel being passed to the attach/detach functions
 	-- CNetChan::ProcessMessages doesn't use a virtual hook, so we don't need to pass the net channel
@@ -17,7 +16,7 @@ HookNetChannel(
 local function CopyBufferEnd(dst, src)
 	local bitsleft = src:GetNumBitsLeft()
 	local data = src:ReadBits(bitsleft)
-	
+
 	dst:WriteBits(data)
 end
 
@@ -44,18 +43,16 @@ hook.Add("PreProcessMessages", "InFilter", function(netchan, read, write, localc
 	while read:GetNumBitsLeft() >= NET_MESSAGE_BITS do
 		local msg = read:ReadUInt(NET_MESSAGE_BITS)
 
-		if CLIENT then
+		if CLIENT and msg == net_SignonState then
 			-- Hack to prevent changelevel crashes
-			if msg == net_SignonState then
-				local state = read:ReadByte()
-				
-				if state == SIGNONSTATE_CHANGELEVEL then
-					changeLevelState = true
-					--print( "[gm_sourcenet] Received changelevel packet" )
-				end
-				
-				read:Seek(read:GetNumBitsRead() - 8)
+			local state = read:ReadByte()
+
+			if state == SIGNONSTATE_CHANGELEVEL then
+				changeLevelState = true
+				--print( "[gm_sourcenet] Received changelevel packet" )
 			end
+
+			read:Seek(read:GetNumBitsRead() - 8)
 		end
 
 		local handler = NET_MESSAGES[msg]
@@ -63,7 +60,7 @@ hook.Add("PreProcessMessages", "InFilter", function(netchan, read, write, localc
 		--[[if msg ~= net_NOP and msg ~= 3 and msg ~= 9 then
 			Msg("(in) Pre Message: " .. msg .. ", bits: " .. read:GetNumBitsRead() .. "/" .. totalbits .. "\n")
 		end--]]
-	
+
 		if not handler then
 			if CLIENT then
 				handler = NET_MESSAGES.SVC[msg]
@@ -83,27 +80,21 @@ hook.Add("PreProcessMessages", "InFilter", function(netchan, read, write, localc
 
 				if not handler then
 					Msg("Unknown outgoing message: " .. msg .. "\n")
-						
 					write:Seek(totalbits)
-
 					break
 				end
 			end
 		end
 
 		local func = handler.IncomingCopy or handler.DefaultCopy
-
 		local success, ret = xpcall(func, debug.traceback, netchan, read, write)
 		if not success then
 			print(ret)
-
 			break
 		elseif ret == false then
 		--if func(netchan, read, write) == false then
 			Msg("Failed to filter message " .. msg .. "\n")
-
 			write:Seek(totalbits)
-
 			break
 		end
 
@@ -111,19 +102,16 @@ hook.Add("PreProcessMessages", "InFilter", function(netchan, read, write, localc
 			Msg("(in) Post Message: " .. msg .. " bits: " .. read:GetNumBitsRead() .. "/" .. totalbits .. "\n")
 		end--]]
 	end
-	
-	if CLIENT then
-		if changeLevelState then
-			--print("[gm_sourcenet] Server is changing level, calling PreNetChannelShutdown")
-			hook.Call("PreNetChannelShutdown", nil, netchan, "Server Changing Level")
-		end
+
+	if CLIENT and changeLevelState then
+		--print("[gm_sourcenet] Server is changing level, calling PreNetChannelShutdown")
+		hook.Call("PreNetChannelShutdown", nil, netchan, "Server Changing Level")
 	end
 end)
 
 function FilterIncomingMessage(msg, func)
 	local handler = NET_MESSAGES[msg]
-
-	if not handler then
+	if handler == nil then
 		if CLIENT then
 			handler = NET_MESSAGES.SVC[msg]
 		else
@@ -131,7 +119,7 @@ function FilterIncomingMessage(msg, func)
 		end
 	end
 
-	if handler then
+	if handler ~= nil then
 		handler.IncomingCopy = func
 	end
 end
